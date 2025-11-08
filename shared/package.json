@@ -1,0 +1,17 @@
+{
+  "name": "xl8r-arena-shared",
+  "version": "1.0.0",
+  "description": "Shared types and utilities for XLR8 Arena",
+  "main": "index.ts",
+  "types": "index.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "mongoose": "^8.0.3"
+  }
+}
