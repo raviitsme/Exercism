@@ -1,0 +1,94 @@
+import { Request, Response, NextFunction } from 'express'
+import { logger } from '../utils/logger'
+
+export interface ApiError extends Error {
+  statusCode?: number
+  isOperational?: boolean
+}
+
+export class AppError extends Error implements ApiError {
+  public statusCode: number
+  public isOperational: boolean
+
+  constructor(message: string, statusCode: number = 500, isOperational: boolean = true) {
+    super(message)
+    this.statusCode = statusCode
+    this.isOperational = isOperational
+
+    Error.captureStackTrace(this, this.constructor)
+  }
+}
+
+export const errorHandler = (
+  error: ApiError,
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  let { statusCode = 500, message } = error
+
+  // Log error
+  logger.error('API Error:', {
+    error: error.message,
+    stack: error.stack,
+    url: req.url,
+    method: req.method,
+    ip: req.ip,
+    userAgent: req.get('User-Agent')
+  })
+
+  // Mongoose validation error
+  if (error.name === 'ValidationError') {
+    statusCode = 400
+    message = Object.values((error as any).errors).map((err: any) => err.message).join(', ')
+  }
+
+  // Mongoose duplicate key error
+  if (error.name === 'MongoServerError' && (error as any).code === 11000) {
+    statusCode = 400
+    const field = Object.keys((error as any).keyValue)[0]
+    message = `${field} already exists`
+  }
+
+  // Mongoose cast error
+  if (error.name === 'CastError') {
+    statusCode = 400
+    message = 'Invalid data format'
+  }
+
+  // JWT errors
+  if (error.name === 'JsonWebTokenError') {
+    statusCode = 401
+    message = 'Invalid token'
+  }
+
+  if (error.name === 'TokenExpiredError') {
+    statusCode = 401
+    message = 'Token expired'
+  }
+
+  // Production vs Development response
+  if (process.env.NODE_ENV === 'production') {
+    res.status(statusCode).json({
+      success: false,
+      error: message,
+      ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+    })
+  } else {
+    res.status(statusCode).json({
+      success: false,
+      error: message,
+      stack: error.stack,
+      details: error
+    })
+  }
+}
+
+export const notFound = (req: Request, res: Response, next: NextFunction) => {
+  const error = new AppError(`Route ${req.originalUrl} not found`, 404)
+  next(error)
+}
+
+export const asyncHandler = (fn: Function) => (req: Request, res: Response, next: NextFunction) => {
+  Promise.resolve(fn(req, res, next)).catch(next)
+}
